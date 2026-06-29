@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/menu_screen.dart'; // Tambahkan baris import ini
+import 'screens/main_navigation.dart'; // Tambahkan baris import ini
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,7 +25,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
-      home: const MenuScreen(), // Ubah bagian home menjadi ini
+      home: const MainNavigation(), // Ubah bagian home menjadi ini
     );
   }
 }
