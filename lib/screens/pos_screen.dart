@@ -155,14 +155,19 @@ class _PosScreenState extends State<PosScreen> {
               return InkWell(
                 onTap: () => _addToCart(menu),
                 child: Card(
-                  color: Colors.orange[50],
-                  elevation: 2,
                   child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.fastfood, size: 40, color: Colors.orange),
-                      const SizedBox(height: 8),
-                      Text(menu.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Expanded(
+                        // === GANTI HANYA BAGIAN INI SAJA ===
+                        child: menu.imageUrl != null
+                            ? Image.network(menu.imageUrl!, fit: BoxFit.cover, width: double.infinity)
+                            : const Icon(Icons.fastfood, size: 40, color: Colors.orange),
+                        // ===================================
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(menu.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                       Text('Rp ${menu.price.toStringAsFixed(0)}'),
                     ],
                   ),

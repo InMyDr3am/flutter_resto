@@ -1,4 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:io'; 
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/menu_model.dart';
 import '../models/ingredient_model.dart';
 import '../models/order_model.dart';
@@ -32,6 +34,22 @@ class SupabaseService {
       await _client.from('menus').insert(menu.toJson());
     } catch (e) {
       throw Exception('Gagal menambah menu: $e');
+    }
+  }
+
+  // 3. Fungsi untuk upload gambar ke Storage dan ambil URL-nya
+  Future<String> uploadMenuImage(File imageFile) async {
+    try {
+      final fileName = DateTime.now().millisecondsSinceEpoch.toString(); // Nama file unik
+      final path = 'public/$fileName.jpg';
+
+      await _client.storage.from('menu-images').upload(path, imageFile);
+
+      // Ambil URL publik gambar yang baru diupload
+      final String publicUrl = _client.storage.from('menu-images').getPublicUrl(path);
+      return publicUrl;
+    } catch (e) {
+      throw Exception('Gagal upload gambar: $e');
     }
   }
 
