@@ -97,6 +97,48 @@ class SupabaseService {
         .map((maps) => maps.map((json) => OrderModel.fromJson(json)).toList());
   }
 
+  // 3. Fungsi untuk mengambil detail item makanan dari sebuah pesanan
+  Future<List<OrderItemModel>> getOrderItems(String orderId) async {
+    try {
+      final response = await _client
+          .from('order_items')
+          .select('*, menus(name)') // Mengambil data relasi nama menu sekaligus
+          .eq('order_id', orderId);
+      
+      return (response as List).map((json) => OrderItemModel.fromJson(json)).toList();
+    } catch (e) {
+      throw Exception('Gagal mengambil detail pesanan: $e');
+    }
+  }
+
+  // 4. Fungsi untuk mengubah status pesanan (misal: pending -> completed)
+  Future<void> updateOrderStatus(String orderId, String newStatus) async {
+    try {
+      await _client
+          .from('orders')
+          .update({'status': newStatus})
+          .eq('id', orderId);
+    } catch (e) {
+      throw Exception('Gagal memperbarui status pesanan: $e');
+    }
+  }
+
+  // 5. Fungsi untuk menyelesaikan pembayaran dan mencatat metode serta kembalian
+  Future<void> completePayment(String orderId, String paymentMethod, double changeAmount) async {
+    try {
+      await _client
+          .from('orders')
+          .update({
+            'status': 'paid', // Diubah dari 'completed' menjadi 'paid' (atau 'purchased')
+            'payment_method': paymentMethod,
+            'change_amount': changeAmount,
+          })
+          .eq('id', orderId);
+    } catch (e) {
+      throw Exception('Gagal memproses pembayaran: $e');
+    }
+  }
+
   // 1. Simpan Nota Belanja & Update Stok
   Future<void> createPurchase(PurchaseModel purchase, List<PurchaseItemModel> items) async {
     try {
