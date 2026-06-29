@@ -107,7 +107,10 @@ class _OrderScreenState extends State<OrderScreen> {
         backgroundColor: Colors.orange,
       ),
       body: StreamBuilder<List<OrderModel>>(
-        stream: _supabaseService.getOrdersStream(),
+        // PERUBAHAN DI SINI: Ditambahkan .map untuk menyaring status 'pending' saja
+        stream: _supabaseService.getOrdersStream().map(
+              (orders) => orders.where((order) => order.status == 'pending').toList(),
+            ),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -122,34 +125,28 @@ class _OrderScreenState extends State<OrderScreen> {
             itemCount: orders.length,
             itemBuilder: (context, index) {
               final order = orders[index];
-              // Menyesuaikan warna berdasarkan status
-              final isCompleted = order.status == 'completed';
               
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                elevation: isCompleted ? 1 : 4,
-                color: isCompleted ? Colors.grey[200] : Colors.white,
+                elevation: 4,
                 child: ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: isCompleted ? Colors.grey : Colors.orange,
-                    child: const Icon(Icons.receipt, color: Colors.white),
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.orange,
+                    child: Icon(Icons.receipt, color: Colors.white),
                   ),
                   title: Text(
                     '${order.customerName} (Meja: ${order.tableNumber ?? "-"})',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      decoration: isCompleted ? TextDecoration.lineThrough : null,
-                    ),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   subtitle: Text('Total: Rp ${order.totalPrice.toStringAsFixed(0)}'),
-                  trailing: Chip(
+                  trailing: const Chip(
                     label: Text(
-                      order.status.toUpperCase(),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      'PENDING',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    backgroundColor: isCompleted ? Colors.green[100] : Colors.orange[100],
+                    backgroundColor: Colors.orangeAccent,
                   ),
-                  onTap: () => _showOrderDetails(order), // Panggil fungsi popup di sini
+                  onTap: () => _showOrderDetails(order),
                 ),
               );
             },

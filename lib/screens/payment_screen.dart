@@ -113,9 +113,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                             actions: [
                               ElevatedButton(
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.white,
+                                ),
                                 onPressed: () => Navigator.pop(context),
-                                child: const Text('OK', style: TextStyle(color: Colors.white)),
+                                child: const Text('OK'),
                               )
                             ],
                           ),
@@ -127,8 +130,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       }
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-                  child: const Text('Selesaikan Pembayaran', style: TextStyle(color: Colors.white)),
+                  // === PEMBARUAN GAYA TOMBOL DI SINI ===
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[800], // Oranye gelap yang solid & elegan
+                    foregroundColor: Colors.white,      // Teks putih bersih agar sangat kontras dan mudah dibaca
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8), // Membuat sudut sedikit membulat agar rapi
+                    ),
+                  ),
+                  child: const Text(
+                    'Selesaikan Pembayaran', 
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
@@ -177,7 +191,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   trailing: const Chip(
                     label: Text(
                       'BELUM BAYAR',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.red),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color.fromARGB(255, 17, 5, 4)),
                     ),
                     backgroundColor: Colors.redAccent,
                   ),
