@@ -1,6 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/menu_model.dart';
 import '../models/ingredient_model.dart';
+import '../models/order_model.dart';
+import '../models/order_item_model.dart';
+import '../models/purchase_model.dart';
+import '../models/purchase_item_model.dart';
 
 class SupabaseService {
   // Mengambil instance client Supabase yang sudah diinisialisasi di main.dart
@@ -54,5 +58,75 @@ class SupabaseService {
     } catch (e) {
       throw Exception('Gagal menambah bahan baku: $e');
     }
+  }
+
+  // ================= FUNGSI UNTUK PESANAN (ORDERS) =================
+
+  // 1. Fungsi untuk membuat pesanan baru beserta rincian itemnya
+  Future<void> createOrder(OrderModel order, List<OrderItemModel> items) async {
+    try {
+      // Langkah A: Masukkan data nota utama ke tabel 'orders' dan ambil ID-nya
+      final orderResponse = await _client
+          .from('orders')
+          .insert(order.toJson())
+          .select()
+          .single();
+      
+      final String orderId = orderResponse['id'];
+
+      // Langkah B: Pasangkan orderId yang baru saja dibuat ke setiap item makanan yang dipesan
+      final itemsJson = items.map((item) {
+        final json = item.toJson();
+        json['order_id'] = orderId;
+        return json;
+      }).toList();
+
+      // Langkah C: Masukkan semua item sekaligus (Bulk Insert) ke tabel 'order_items'
+      await _client.from('order_items').insert(itemsJson);
+    } catch (e) {
+      throw Exception('Gagal membuat pesanan baru: $e');
+    }
+  }
+
+  // 2. Fungsi Real-time Stream untuk memantau pesanan masuk secara live (Tanpa perlu refresh layar)
+  Stream<List<OrderModel>> getOrdersStream() {
+    return _client
+        .from('orders')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false) // Pesanan terbaru muncul paling atas
+        .map((maps) => maps.map((json) => OrderModel.fromJson(json)).toList());
+  }
+
+  // 1. Simpan Nota Belanja & Update Stok
+  Future<void> createPurchase(PurchaseModel purchase, List<PurchaseItemModel> items) async {
+    try {
+      // Simpan Nota Master
+      final res = await _client.from('purchases').insert(purchase.toJson()).select().single();
+      final purchaseId = res['id'];
+
+      for (var item in items) {
+        // Simpan Detail Item
+        await _client.from('purchase_items').insert({
+          'purchase_id': purchaseId,
+          ...item.toJson(),
+        });
+
+        // OTOMATIS UPDATE STOK: Ambil stok lama + quantity baru
+        final ingRes = await _client.from('ingredients').select('stock').eq('id', item.ingredientId).single();
+        double currentStock = (ingRes['stock'] as num).toDouble();
+        
+        await _client.from('ingredients').update({
+          'stock': currentStock + item.quantity
+        }).eq('id', item.ingredientId);
+      }
+    } catch (e) {
+      throw Exception('Gagal mencatat belanja: $e');
+    }
+  }
+
+  // 2. Ambil Riwayat Belanja
+  Future<List<PurchaseModel>> getPurchases() async {
+    final res = await _client.from('purchases').select().order('purchase_date', ascending: false);
+    return (res as List).map((json) => PurchaseModel.fromJson(json)).toList();
   }
 }
