@@ -157,6 +157,30 @@ class SupabaseService {
     }
   }
 
+  // 6. Fungsi untuk memperbarui data menu
+  Future<void> updateMenu(MenuModel menu) async {
+    try {
+      await _client
+          .from('menus')
+          .update(menu.toJson())
+          .eq('id', menu.id!);
+    } catch (e) {
+      throw Exception('Gagal memperbarui menu: $e');
+    }
+  }
+
+  // 7. Fungsi untuk menghapus data menu
+  Future<void> deleteMenu(String menuId) async {
+    try {
+      await _client
+          .from('menus')
+          .delete()
+          .eq('id', menuId);
+    } catch (e) {
+      throw Exception('Gagal menghapus menu: $e');
+    }
+  }
+
   // 1. Simpan Nota Belanja & Update Stok
   Future<void> createPurchase(PurchaseModel purchase, List<PurchaseItemModel> items) async {
     try {
