@@ -4,7 +4,8 @@ class OrderItemModel {
   final String menuId;
   final int quantity;
   final double price;
-  final String? menuName; // Tambahan properti opsional untuk mempermudah pemanggilan nama makanan di UI
+  final String? menuName; 
+  final String? note; 
 
   OrderItemModel({
     this.id,
@@ -13,6 +14,7 @@ class OrderItemModel {
     required this.quantity,
     required this.price,
     this.menuName,
+    this.note,
   });
 
   factory OrderItemModel.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class OrderItemModel {
       quantity: json['quantity'],
       price: (json['price'] as num).toDouble(),
       menuName: json['menus']?['name'], // Supabase otomatis menggabungkan relasi nama menu jika kita panggil
+      note: json['note'], // Menambahkan properti note dari JSON
     );
   }
 
@@ -33,6 +36,7 @@ class OrderItemModel {
       'menu_id': menuId,
       'quantity': quantity,
       'price': price,
+      if (note != null) 'note': note,
     };
   }
 }

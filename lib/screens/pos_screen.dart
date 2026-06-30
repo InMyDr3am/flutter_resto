@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../utils/format_helper.dart';
+import 'package:intl/intl.dart';
 import '../models/menu_model.dart';
 import '../models/cart_item.dart';
 import '../models/order_model.dart';
 import '../models/order_item_model.dart';
 import '../services/supabase_service.dart';
+
+// Catatan: Pastikan model CartItem Anda mendukung properti note,
+// contoh: class CartItem { MenuModel menu; int quantity; String note; ... }
 
 class PosScreen extends StatefulWidget {
   const PosScreen({super.key});
@@ -17,7 +20,6 @@ class PosScreen extends StatefulWidget {
 class _PosScreenState extends State<PosScreen> {
   final SupabaseService _supabaseService = SupabaseService();
   
-  // Penyimpanan data untuk pencarian dan filter kategori
   List<MenuModel> _allMenus = [];
   List<MenuModel> _filteredMenus = [];
   bool _isLoading = true;
@@ -25,7 +27,6 @@ class _PosScreenState extends State<PosScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'Semua';
   
-  // Ini adalah keranjang belanja kasir
   final List<CartItem> _cart = []; 
 
   @override
@@ -41,7 +42,6 @@ class _PosScreenState extends State<PosScreen> {
     super.dispose();
   }
 
-  // Mengambil data awal dari database
   void _loadAllMenusForPOS() async {
     setState(() => _isLoading = true);
     try {
@@ -56,16 +56,13 @@ class _PosScreenState extends State<PosScreen> {
     }
   }
 
-  // Logika Filter Kategori dan Pencarian Nama Menu
   void _applyFilterAndSearch() {
     String query = _searchController.text.toLowerCase();
     setState(() {
       _filteredMenus = _allMenus.where((menu) {
-        // Filter Kategori (mengabaikan huruf besar/kecil)
         bool matchesCategory = _selectedCategory == 'Semua' || 
             (menu.category != null && menu.category!.toLowerCase() == _selectedCategory.toLowerCase());
         
-        // Filter Pencarian Nama
         bool matchesSearch = menu.name.toLowerCase().contains(query);
 
         return matchesCategory && matchesSearch;
@@ -73,19 +70,25 @@ class _PosScreenState extends State<PosScreen> {
     });
   }
 
-  // Fungsi menambah menu ke keranjang
+  String formatCurrency(double amount) {
+    final format = NumberFormat.currency(
+      locale: 'id_ID', 
+      symbol: 'Rp. ', 
+      decimalDigits: 0,
+    );
+    return format.format(amount);
+  }
+
   void _addToCart(MenuModel menu) {
     setState(() {
-      // Cek apakah menu sudah ada di keranjang
       final existingItemIndex = _cart.indexWhere((item) => item.menu.id == menu.id);
       if (existingItemIndex >= 0) {
         _cart[existingItemIndex].quantity++;
       } else {
-        _cart.add(CartItem(menu: menu));
+        _cart.add(CartItem(menu: menu, note: '')); // Inisialisasi catatan kosong default
       }
     });
     
-    // Tampilkan notifikasi kecil di bawah (Snackbar)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${menu.name} ditambahkan!', style: GoogleFonts.poppins()),
@@ -95,13 +98,140 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // Menghitung total belanja saat ini
   double get _cartTotal => _cart.fold(0, (sum, item) => sum + item.totalPrice);
 
-  // Fungsi memproses pesanan (Checkout)
-  void _checkout() {
+  // === LANGKAH 1: RINCIAN PESANAN DENGAN KOLOM CATATAN (note) ===
+  void _showOrderDetails() {
     if (_cart.isEmpty) return;
 
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: Text('Rincian Pesanan', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+              content: SizedBox(
+                width: 450,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Expanded(
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: _cart.length,
+                        itemBuilder: (context, index) {
+                          final cartItem = _cart[index];
+                          final noteController = TextEditingController(text: cartItem.note);
+
+                          return Column(
+                            children: [
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(
+                                  cartItem.menu.name, 
+                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13)
+                                ),
+                                subtitle: Text(
+                                  '${cartItem.quantity} x ${formatCurrency(cartItem.menu.price)}', 
+                                  style: GoogleFonts.poppins(fontSize: 11)
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                                      onPressed: () {
+                                        setStateDialog(() {
+                                          if (cartItem.quantity > 1) {
+                                            cartItem.quantity--;
+                                          } else {
+                                            _cart.remove(cartItem);
+                                          }
+                                        });
+                                        setState(() {}); 
+                                        if (_cart.isEmpty) Navigator.pop(context);
+                                      },
+                                    ),
+                                    Text(
+                                      '${cartItem.quantity}', 
+                                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold)
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.add_circle_outline, color: Colors.green, size: 20),
+                                      onPressed: () {
+                                        setStateDialog(() {
+                                          cartItem.quantity++;
+                                        });
+                                        setState(() {}); 
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Kolom Catatan / Note Khusus per Item Pesanan
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: TextField(
+                                  controller: noteController,
+                                  decoration: InputDecoration(
+                                    hintText: 'Contoh: Tidak pedas, ekstra es batu...',
+                                    hintStyle: GoogleFonts.poppins(fontSize: 10, color: Colors.grey),
+                                    prefixIcon: const Icon(Icons.note_add, size: 16, color: Colors.grey),
+                                    isDense: true,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: const BorderSide(color: Colors.grey, width: 0.5),
+                                    ),
+                                  ),
+                                  style: GoogleFonts.poppins(fontSize: 11),
+                                  onChanged: (value) {
+                                    cartItem.note = value; // Simpan nilai note ke objek keranjang
+                                  },
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Total Keseluruhan:', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+                          Text(formatCurrency(_cartTotal), style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.orange[800])),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Kembali'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showPaymentDialog(); 
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+                  child: const Text('Lanjut Pembayaran'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // === LANGKAH 2: INPUT NAMA DAN MEJA LALU KIRIM KE DAPUR ===
+  void _showPaymentDialog() {
     final customerController = TextEditingController(text: 'Umum');
     final tableController = TextEditingController();
 
@@ -109,12 +239,12 @@ class _PosScreenState extends State<PosScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Proses Pembayaran'),
+          title: Text('Proses Pembayaran', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Total: ${formatCurrency(_cartTotal)}',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('Total yang harus dibayar: ${formatCurrency(_cartTotal)}', 
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange[800])),
               const SizedBox(height: 16),
               TextField(
                 controller: customerController,
@@ -133,27 +263,25 @@ class _PosScreenState extends State<PosScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                // 1. Buat cetakan master Order
                 final newOrder = OrderModel(
                   customerName: customerController.text,
                   tableNumber: tableController.text.isEmpty ? null : tableController.text,
                   totalPrice: _cartTotal,
-                  status: 'pending', // Masuk antrean dapur
+                  status: 'pending', 
                 );
 
-                // 2. Buat rincian order items dari keranjang
+                // Mengirimkan catatan (note) ke dalam parameter pesanan *Order Items*
                 final List<OrderItemModel> orderItems = _cart.map((cartItem) {
                   return OrderItemModel(
                     menuId: cartItem.menu.id!,
                     quantity: cartItem.quantity,
-                    price: cartItem.menu.price, // Kunci harga saat ini
+                    price: cartItem.menu.price, 
+                    note: cartItem.note, // Catatan spesifik tersimpan di sini
                   );
                 }).toList();
 
-                // 3. Kirim ke Supabase
                 await _supabaseService.createOrder(newOrder, orderItems);
 
-                // 4. Bersihkan keranjang dan tutup dialog
                 setState(() {
                   _cart.clear();
                 });
@@ -176,24 +304,23 @@ class _PosScreenState extends State<PosScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100], // Latar belakang abu-abu terang
+      backgroundColor: Colors.grey[100], 
       appBar: AppBar(
         title: Text(
           'Mode Kasir (POS)',
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: Colors.orange[800], // Oranye solid elegan
+        backgroundColor: Colors.orange[800], 
         elevation: 0,
       ),
       body: Column(
         children: [
-          // === SEARCH BAR DAN FILTER KATEGORI ===
+          // === SEARCH BARIS PENCARIAN DAN FILTER KATEGORI ===
           Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
             child: Column(
               children: [
-                // Input Pencarian
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -208,7 +335,6 @@ class _PosScreenState extends State<PosScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Tab Kategori Chips
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: ['Semua', 'Makanan', 'Minuman'].map((cat) {
@@ -240,7 +366,7 @@ class _PosScreenState extends State<PosScreen> {
             ),
           ),
 
-          // === GRID TAMPILAN MENU ===
+          // === GRID TAMPILAN MENU (GAYA KARTU MODERN) ===
           Expanded(
             child: _isLoading 
               ? const Center(child: CircularProgressIndicator())
@@ -254,8 +380,8 @@ class _PosScreenState extends State<PosScreen> {
                 : GridView.builder(
                     padding: const EdgeInsets.all(12),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2, // Menampilkan 2 kolom
-                      childAspectRatio: 0.95, // Rasio area kotak
+                      crossAxisCount: 2, 
+                      childAspectRatio: 0.95, 
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
                     ),
@@ -263,56 +389,90 @@ class _PosScreenState extends State<PosScreen> {
                     itemBuilder: (context, index) {
                       final menu = _filteredMenus[index];
                       return InkWell(
-                        borderRadius: BorderRadius.circular(16), // Efek sentuh membulat
+                        borderRadius: BorderRadius.circular(20), 
                         onTap: () => _addToCart(menu),
                         child: Card(
-                          elevation: 2,
+                          elevation: 3,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          clipBehavior: Clip.antiAlias, // Gambar mengikuti sudut kartu
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          clipBehavior: Clip.antiAlias, 
+                          child: Stack(
                             children: [
-                              Expanded(
-                                child: menu.imageUrl != null
-                                    ? Image.network(
-                                        menu.imageUrl!, 
-                                        fit: BoxFit.cover, 
-                                        width: double.infinity
-                                      )
-                                    : Container(
-                                        color: Colors.orange[50],
-                                        child: const Center(
-                                          child: Icon(Icons.fastfood, size: 50, color: Colors.orange),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: menu.imageUrl != null
+                                        ? Image.network(
+                                            menu.imageUrl!, 
+                                            fit: BoxFit.cover, 
+                                            width: double.infinity
+                                          )
+                                        : Container(
+                                            color: Colors.orange[50],
+                                            child: const Center(
+                                              child: Icon(Icons.fastfood, size: 50, color: Colors.orange),
+                                            ),
+                                          ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          menu.name, 
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 14,
+                                            color: Colors.grey[850],
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
-                                      ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Sugar, flour, butter, toppings', 
+                                          style: GoogleFonts.poppins(color: Colors.grey, fontSize: 10),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          formatCurrency(menu.price),
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Padding(
-                                padding: const EdgeInsets.all(10.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      menu.name, 
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14, 
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey[850],
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
+                              // Tombol keranjang kecil di sudut kanan bawah kartu
+                              Positioned(
+                                bottom: 12,
+                                right: 12,
+                                child: GestureDetector(
+                                  onTap: () => _addToCart(menu),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.grey.withOpacity(0.3),
+                                          spreadRadius: 1,
+                                          blurRadius: 3,
+                                          offset: const Offset(0, 1),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      formatCurrency(menu.price),
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 13, 
-                                        color: Colors.orange[800],
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
+                                    child: const Icon(Icons.add_shopping_cart, size: 18, color: Colors.black),
+                                  ),
                                 ),
                               ),
                             ],
@@ -325,50 +485,41 @@ class _PosScreenState extends State<PosScreen> {
         ],
       ),
       
-      // Tombol Keranjang Bawah (Modern Floating Bar)
-      bottomNavigationBar: _cart.isEmpty 
-          ? null 
-          : Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withValues(alpha: 0.2),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                child: ElevatedButton(
-                  onPressed: _checkout,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange[800],
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.shopping_cart, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Lihat Keranjang (${_cart.length} Item) • ${formatCurrency(_cartTotal)}',
+      // Tombol Keranjang Totalan Utama (Floating Fuchsia/Pink Button Modern)
+      floatingActionButton: _cart.isEmpty 
+        ? null 
+        : FloatingActionButton(
+            onPressed: _showOrderDetails, 
+            backgroundColor: const Color(0xFFF03681), 
+            foregroundColor: Colors.white,
+            elevation: 6,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.shopping_cart, size: 28),
+                if (_cart.isNotEmpty)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                      child: Text(
+                        '${_cart.fold(0, (sum, item) => sum + item.quantity)}',
                         style: GoogleFonts.poppins(
-                          fontSize: 16, 
-                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFFF03681), 
+                          fontSize: 10, 
+                          fontWeight: FontWeight.bold
                         ),
+                        textAlign: TextAlign.center,
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+              ],
             ),
+          ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
