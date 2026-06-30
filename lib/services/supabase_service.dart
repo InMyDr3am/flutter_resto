@@ -1,6 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io'; 
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/menu_model.dart';
 import '../models/ingredient_model.dart';
 import '../models/order_model.dart';

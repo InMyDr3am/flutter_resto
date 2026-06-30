@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/menu_model.dart';
 import '../models/cart_item.dart';
 import '../models/order_model.dart';
@@ -124,12 +125,19 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
+  // ... (biarkan bagian atas file seperti import dan deklarasi class tetap sama)
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[100], // Latar belakang abu-abu terang agar terkesan bersih
       appBar: AppBar(
-        title: const Text('Mode Kasir (POS)'),
-        backgroundColor: Colors.orange,
+        title: Text(
+          'Mode Kasir (POS)',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        backgroundColor: Colors.orange[800], // Oranye yang lebih solid dan elegan
+        elevation: 0,
       ),
       body: FutureBuilder<List<MenuModel>>(
         future: _menusFuture,
@@ -137,38 +145,79 @@ class _PosScreenState extends State<PosScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('Tidak ada menu.'));
+            return Center(
+              child: Text(
+                'Belum ada menu yang tersedia.',
+                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
+              ),
+            );
           }
 
           final menus = snapshot.data!;
           return GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // Menampilkan 2 kolom menu
-              childAspectRatio: 1.2,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
+              crossAxisCount: 2, // Menampilkan 2 kolom
+              childAspectRatio: 0.95, // Memperluas area kotak agar pas untuk gambar dan teks
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
             ),
             itemCount: menus.length,
             itemBuilder: (context, index) {
               final menu = menus[index];
               return InkWell(
+                borderRadius: BorderRadius.circular(16), // Efek sentuh membulat
                 onTap: () => _addToCart(menu),
                 child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16), // Sudut kartu membulat modern
+                  ),
+                  clipBehavior: Clip.antiAlias, // Memastikan gambar mengikuti sudut kartu
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                        // === GANTI HANYA BAGIAN INI SAJA ===
                         child: menu.imageUrl != null
-                            ? Image.network(menu.imageUrl!, fit: BoxFit.cover, width: double.infinity)
-                            : const Icon(Icons.fastfood, size: 40, color: Colors.orange),
-                        // ===================================
+                            ? Image.network(
+                                menu.imageUrl!, 
+                                fit: BoxFit.cover, 
+                                width: double.infinity
+                              )
+                            : Container(
+                                color: Colors.orange[50],
+                                child: const Center(
+                                  child: Icon(Icons.fastfood, size: 50, color: Colors.orange),
+                                ),
+                              ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Text(menu.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        padding: const EdgeInsets.all(10.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              menu.name, 
+                              style: GoogleFonts.poppins(
+                                fontSize: 14, 
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey[850],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Rp ${menu.price.toStringAsFixed(0)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13, 
+                                color: Colors.orange[800],
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      Text('Rp ${menu.price.toStringAsFixed(0)}'),
                     ],
                   ),
                 ),
@@ -177,24 +226,51 @@ class _PosScreenState extends State<PosScreen> {
           );
         },
       ),
-      // Tampilkan tombol keranjang di bawah jika ada isinya
+      
+      // Tombol Keranjang Bawah (Modern Floating Bar)
       bottomNavigationBar: _cart.isEmpty 
-        ? null 
-        : Container(
-            padding: const EdgeInsets.all(16),
-            color: Colors.white,
-            child: ElevatedButton(
-              onPressed: _checkout,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+          ? null 
+          : Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.2),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
               ),
-              child: Text(
-                'Keranjang (${_cart.length} item) - Rp ${_cartTotal.toStringAsFixed(0)}',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              child: SafeArea(
+                child: ElevatedButton(
+                  onPressed: _checkout,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange[800],
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.shopping_cart, size: 22),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Lihat Keranjang (${_cart.length} Item) • Rp ${_cartTotal.toStringAsFixed(0)}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 16, 
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
     );
   }
 }
