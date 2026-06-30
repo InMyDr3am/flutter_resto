@@ -15,7 +15,14 @@ class PosScreen extends StatefulWidget {
 
 class _PosScreenState extends State<PosScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  late Future<List<MenuModel>> _menusFuture;
+  
+  // Penyimpanan data untuk pencarian dan filter kategori
+  List<MenuModel> _allMenus = [];
+  List<MenuModel> _filteredMenus = [];
+  bool _isLoading = true;
+
+  final TextEditingController _searchController = TextEditingController();
+  String _selectedCategory = 'Semua';
   
   // Ini adalah keranjang belanja kasir
   final List<CartItem> _cart = []; 
@@ -23,7 +30,46 @@ class _PosScreenState extends State<PosScreen> {
   @override
   void initState() {
     super.initState();
-    _menusFuture = _supabaseService.getMenus();
+    _loadAllMenusForPOS();
+    _searchController.addListener(_applyFilterAndSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // Mengambil data awal dari database
+  void _loadAllMenusForPOS() async {
+    setState(() => _isLoading = true);
+    try {
+      final menus = await _supabaseService.getMenus();
+      setState(() {
+        _allMenus = menus;
+        _isLoading = false;
+        _applyFilterAndSearch();
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Logika Filter Kategori dan Pencarian Nama Menu
+  void _applyFilterAndSearch() {
+    String query = _searchController.text.toLowerCase();
+    setState(() {
+      _filteredMenus = _allMenus.where((menu) {
+        // Filter Kategori (mengabaikan huruf besar/kecil)
+        bool matchesCategory = _selectedCategory == 'Semua' || 
+            (menu.category != null && menu.category!.toLowerCase() == _selectedCategory.toLowerCase());
+        
+        // Filter Pencarian Nama
+        bool matchesSearch = menu.name.toLowerCase().contains(query);
+
+        return matchesCategory && matchesSearch;
+      }).toList();
+    });
   }
 
   // Fungsi menambah menu ke keranjang
@@ -41,8 +87,9 @@ class _PosScreenState extends State<PosScreen> {
     // Tampilkan notifikasi kecil di bawah (Snackbar)
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${menu.name} ditambahkan!'),
-        duration: const Duration(seconds: 1),
+        content: Text('${menu.name} ditambahkan!', style: GoogleFonts.poppins()),
+        duration: const Duration(milliseconds: 600),
+        backgroundColor: Colors.orange[800],
       ),
     );
   }
@@ -116,8 +163,8 @@ class _PosScreenState extends State<PosScreen> {
                   );
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              child: const Text('Kirim Pesanan', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+              child: const Text('Kirim Pesanan'),
             ),
           ],
         );
@@ -125,106 +172,156 @@ class _PosScreenState extends State<PosScreen> {
     );
   }
 
-  // ... (biarkan bagian atas file seperti import dan deklarasi class tetap sama)
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100], // Latar belakang abu-abu terang agar terkesan bersih
+      backgroundColor: Colors.grey[100], // Latar belakang abu-abu terang
       appBar: AppBar(
         title: Text(
           'Mode Kasir (POS)',
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: Colors.orange[800], // Oranye yang lebih solid dan elegan
+        backgroundColor: Colors.orange[800], // Oranye solid elegan
         elevation: 0,
       ),
-      body: FutureBuilder<List<MenuModel>>(
-        future: _menusFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return Center(
-              child: Text(
-                'Belum ada menu yang tersedia.',
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
-              ),
-            );
-          }
-
-          final menus = snapshot.data!;
-          return GridView.builder(
+      body: Column(
+        children: [
+          // === SEARCH BAR DAN FILTER KATEGORI ===
+          Container(
             padding: const EdgeInsets.all(12),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2, // Menampilkan 2 kolom
-              childAspectRatio: 0.95, // Memperluas area kotak agar pas untuk gambar dan teks
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: menus.length,
-            itemBuilder: (context, index) {
-              final menu = menus[index];
-              return InkWell(
-                borderRadius: BorderRadius.circular(16), // Efek sentuh membulat
-                onTap: () => _addToCart(menu),
-                child: Card(
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16), // Sudut kartu membulat modern
-                  ),
-                  clipBehavior: Clip.antiAlias, // Memastikan gambar mengikuti sudut kartu
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: menu.imageUrl != null
-                            ? Image.network(
-                                menu.imageUrl!, 
-                                fit: BoxFit.cover, 
-                                width: double.infinity
-                              )
-                            : Container(
-                                color: Colors.orange[50],
-                                child: const Center(
-                                  child: Icon(Icons.fastfood, size: 50, color: Colors.orange),
-                                ),
-                              ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              menu.name, 
-                              style: GoogleFonts.poppins(
-                                fontSize: 14, 
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[850],
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Rp ${menu.price.toStringAsFixed(0)}',
-                              style: GoogleFonts.poppins(
-                                fontSize: 13, 
-                                color: Colors.orange[800],
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+            color: Colors.white,
+            child: Column(
+              children: [
+                // Input Pencarian
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Cari menu atau minuman...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10), 
+                      borderSide: BorderSide.none
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[100],
                   ),
                 ),
-              );
-            },
-          );
-        },
+                const SizedBox(height: 10),
+                // Tab Kategori Chips
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: ['Semua', 'Makanan', 'Minuman'].map((cat) {
+                    bool isActive = _selectedCategory == cat;
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(20),
+                      onTap: () {
+                        setState(() => _selectedCategory = cat);
+                        _applyFilterAndSearch();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isActive ? Colors.orange[800] : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          cat,
+                          style: GoogleFonts.poppins(
+                            color: isActive ? Colors.white : Colors.grey[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+
+          // === GRID TAMPILAN MENU ===
+          Expanded(
+            child: _isLoading 
+              ? const Center(child: CircularProgressIndicator())
+              : _filteredMenus.isEmpty 
+                ? Center(
+                    child: Text(
+                      'Menu tidak ditemukan.', 
+                      style: GoogleFonts.poppins(color: Colors.grey)
+                    ),
+                  )
+                : GridView.builder(
+                    padding: const EdgeInsets.all(12),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2, // Menampilkan 2 kolom
+                      childAspectRatio: 0.95, // Rasio area kotak
+                      crossAxisSpacing: 12,
+                      mainAxisSpacing: 12,
+                    ),
+                    itemCount: _filteredMenus.length,
+                    itemBuilder: (context, index) {
+                      final menu = _filteredMenus[index];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(16), // Efek sentuh membulat
+                        onTap: () => _addToCart(menu),
+                        child: Card(
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          clipBehavior: Clip.antiAlias, // Gambar mengikuti sudut kartu
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: menu.imageUrl != null
+                                    ? Image.network(
+                                        menu.imageUrl!, 
+                                        fit: BoxFit.cover, 
+                                        width: double.infinity
+                                      )
+                                    : Container(
+                                        color: Colors.orange[50],
+                                        child: const Center(
+                                          child: Icon(Icons.fastfood, size: 50, color: Colors.orange),
+                                        ),
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(10.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      menu.name, 
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 14, 
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[850],
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Rp ${menu.price.toStringAsFixed(0)}',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13, 
+                                        color: Colors.orange[800],
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
       
       // Tombol Keranjang Bawah (Modern Floating Bar)
@@ -236,7 +333,7 @@ class _PosScreenState extends State<PosScreen> {
                 color: Colors.white,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.2),
+                    color: Colors.grey.withValues(alpha: 0.2),
                     blurRadius: 10,
                     offset: const Offset(0, -5),
                   ),
