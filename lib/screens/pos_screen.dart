@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:intl/intl.dart';
+import '../utils/format_helper.dart';
 import '../models/menu_model.dart';
 import '../models/cart_item.dart';
 import '../models/order_model.dart';
@@ -113,7 +113,7 @@ class _PosScreenState extends State<PosScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Total: Rp ${_cartTotal.toStringAsFixed(0)}', 
+              Text('Total: ${formatCurrency(_cartTotal)}',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               TextField(
@@ -305,7 +305,7 @@ class _PosScreenState extends State<PosScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Rp ${menu.price.toStringAsFixed(0)}',
+                                      formatCurrency(menu.price),
                                       style: GoogleFonts.poppins(
                                         fontSize: 13, 
                                         color: Colors.orange[800],
@@ -358,7 +358,7 @@ class _PosScreenState extends State<PosScreen> {
                       const Icon(Icons.shopping_cart, size: 22),
                       const SizedBox(width: 8),
                       Text(
-                        'Lihat Keranjang (${_cart.length} Item) • Rp ${_cartTotal.toStringAsFixed(0)}',
+                        'Lihat Keranjang (${_cart.length} Item) • ${formatCurrency(_cartTotal)}',
                         style: GoogleFonts.poppins(
                           fontSize: 16, 
                           fontWeight: FontWeight.bold,
