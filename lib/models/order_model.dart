@@ -4,6 +4,7 @@ class OrderModel {
   final String? tableNumber;
   final double totalPrice;
   String status;
+  final DateTime? createdAt;
   final String? paymentMethod; // Tambahan: 'cash' atau 'qris'
   final double? changeAmount;    // Tambahan: nominal kembalian
 
@@ -15,6 +16,7 @@ class OrderModel {
     required this.status,
     this.paymentMethod,
     this.changeAmount,
+    this.createdAt,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) => OrderModel(
@@ -25,6 +27,7 @@ class OrderModel {
         status: json['status'],
         paymentMethod: json['payment_method'],
         changeAmount: json['change_amount'] != null ? (json['change_amount'] as num).toDouble() : null,
+        createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
       );
 
   Map<String, dynamic> toJson() => {
@@ -35,6 +38,7 @@ class OrderModel {
         'status': status,
         'payment_method': paymentMethod,
         'change_amount': changeAmount,
+        'created_at': createdAt,
       };
 
   // Kloning objek dengan pembaruan status & data pembayaran
@@ -42,6 +46,7 @@ class OrderModel {
     String? status,
     String? paymentMethod,
     double? changeAmount,
+    DateTime? createdAt,
   }) {
     return OrderModel(
       id: id,
@@ -51,6 +56,7 @@ class OrderModel {
       status: status ?? this.status,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       changeAmount: changeAmount ?? this.changeAmount,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }
