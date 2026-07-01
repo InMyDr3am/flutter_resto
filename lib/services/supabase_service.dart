@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:io'; 
 import 'package:flutter/material.dart';
+import 'dart:io'; 
+import 'dart:typed_data';
 import '../models/menu_model.dart';
 import '../models/ingredient_model.dart';
 import '../models/order_model.dart';
@@ -51,6 +52,16 @@ class SupabaseService {
     } catch (e) {
       throw Exception('Gagal upload gambar: $e');
     }
+  }
+
+  
+
+  // Fungsi baru yang menerima bytes (aman untuk Web dan Mobile)
+  // Gunakan Uint8List untuk upload agar aman di Web & Mobile
+  Future<String> uploadMenuImageBytes(Uint8List bytes, String fileName) async {
+    final bucket = _client.storage.from('menu_images');
+    await bucket.uploadBinary(fileName, bytes, fileOptions: const FileOptions(contentType: 'image/jpeg'));
+    return bucket.getPublicUrl(fileName);
   }
 
   // ================= FUNGSI UNTUK BAHAN BAKU (INGREDIENTS) =================
@@ -185,7 +196,7 @@ class SupabaseService {
     }
   }
 
-  // 6. Fungsi untuk memperbarui data menu
+   // 6. Fungsi untuk memperbarui data menu
   Future<void> updateMenu(MenuModel menu) async {
     try {
       await _client
@@ -255,13 +266,21 @@ class SupabaseService {
 
 
 // Mengambil riwayat master belanja sebagai Stream
-Stream<List<PurchaseModel>> getPurchasesStream() {
-  return _client // <--- _client diganti menjadi supabase
-      .from('purchases')
-      .stream(primaryKey: ['id'])
-      .order('purchase_date', ascending: false) 
-      .map((list) => list.map((json) => PurchaseModel.fromJson(json)).toList());
-}
+// Mengambil riwayat master belanja sebagai Stream
+  Stream<List<PurchaseModel>> getPurchasesStream() {
+    return _client
+        .from('purchases')
+        .stream(primaryKey: ['id'])
+        .map((list) {
+          // 1. Ubah data JSON dari Supabase menjadi Model Dart
+          final parsedList = list.map((json) => PurchaseModel.fromJson(json)).toList();
+          
+          // 2. Paksa urutkan dari tanggal & waktu paling baru (Descending)
+          parsedList.sort((a, b) => b.purchaseDate.compareTo(a.purchaseDate));
+          
+          return parsedList;
+        });
+  }
 
 // Mengambil rincian item berdasarkan ID belanja
 Future<List<PurchaseItemModel>> getPurchaseItems(String purchaseId) async {

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../models/menu_model.dart';
 import '../services/supabase_service.dart';
 
@@ -14,67 +13,25 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  
-  List<MenuModel> _allMenus = [];
-  List<MenuModel> _filteredMenus = [];
-  bool _isLoading = true;
-
-  String _selectedCategory = 'Semua';
-  final TextEditingController _searchController = TextEditingController();
+  late Future<List<MenuModel>> _menusFuture;
 
   @override
   void initState() {
     super.initState();
-    _loadMenus();
-    _searchController.addListener(_filterMenus);
+    _refreshData();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadMenus() async {
-    setState(() => _isLoading = true);
-    try {
-      final menus = await _supabaseService.getMenus();
-      setState(() {
-        _allMenus = menus;
-        _filterMenus(); // Terapkan filter awal
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memuat menu: $e')),
-      );
-    }
-  }
-
-  // Logika Pencarian dan Kategori
-  void _filterMenus() {
-    String query = _searchController.text.toLowerCase();
+  void _refreshData() {
     setState(() {
-      _filteredMenus = _allMenus.where((menu) {
-        // Filter Kategori
-        bool matchesCategory = _selectedCategory == 'Semua' || 
-            (menu.category != null && menu.category!.toLowerCase() == _selectedCategory.toLowerCase());
-        
-        // Filter Pencarian Nama Menu
-        bool matchesSearch = menu.name.toLowerCase().contains(query);
-
-        return matchesCategory && matchesSearch;
-      }).toList();
+      _menusFuture = _supabaseService.getMenus();
     });
   }
 
-  // === FUNGSI CREATE (TAMBAH DENGAN PILIHAN KATEGORI) ===
+  // === FUNGSI CREATE / TAMBAH MENU ===
   void _showAddMenuDialog() {
     final nameController = TextEditingController();
     final priceController = TextEditingController();
-    String category = 'Makanan'; // Default kategori saat tambah menu
-    File? selectedImage;
+    File? selectedImage; 
 
     showDialog(
       context: context,
@@ -82,7 +39,7 @@ class _MenuScreenState extends State<MenuScreen> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: Text('Tambah Menu Baru', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+              title: const Text('Tambah Menu Baru'),
               content: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -96,27 +53,15 @@ class _MenuScreenState extends State<MenuScreen> {
                         }
                       },
                       child: Container(
-                        height: 120, width: double.infinity,
+                        height: 150, width: double.infinity,
                         decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
                         child: selectedImage == null 
-                          ? const Icon(Icons.add_a_photo, size: 40, color: Colors.grey)
+                          ? const Icon(Icons.add_a_photo, size: 50, color: Colors.grey)
                           : Image.file(selectedImage!, fit: BoxFit.cover),
                       ),
                     ),
-                    const SizedBox(height: 10),
                     TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nama Menu')),
                     TextField(controller: priceController, decoration: const InputDecoration(labelText: 'Harga'), keyboardType: TextInputType.number),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: category,
-                      decoration: const InputDecoration(labelText: 'Kategori'),
-                      items: ['Makanan', 'Minuman'].map((String cat) {
-                        return DropdownMenuItem(value: cat, child: Text(cat));
-                      }).toList(),
-                      onChanged: (String? val) {
-                        if (val != null) setStateDialog(() => category = val);
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -133,16 +78,15 @@ class _MenuScreenState extends State<MenuScreen> {
                       final newMenu = MenuModel(
                         name: nameController.text,
                         price: double.parse(priceController.text),
-                        imageUrl: imageUrl,
-                        category: category.toLowerCase(),
+                        imageUrl: imageUrl, 
                       );
                       
                       await _supabaseService.addMenu(newMenu);
                       if (context.mounted) Navigator.pop(context);
-                      _loadMenus();
+                      _refreshData();
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
                   child: const Text('Simpan'),
                 ),
               ],
@@ -153,130 +97,188 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  // (Fungsi Edit dan Delete bisa disesuaikan dengan dropdown kategori yang sama seperti _showAddMenuDialog)
+  // === FUNGSI EDIT / UPDATE MENU (DENGAN GAMBAR) ===
+  void _showEditMenuDialog(MenuModel menu) {
+    final nameController = TextEditingController(text: menu.name);
+    final priceController = TextEditingController(text: menu.price.toStringAsFixed(0));
+    
+    File? newSelectedImage; // Menyimpan file gambar baru jika kasir mengganti foto
+    String? currentImageUrl = menu.imageUrl; // Menyimpan URL gambar lama (bisa null atau ada isinya)
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              title: const Text('Edit Menu'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Preview Gambar Saat Edit
+                    GestureDetector(
+                      onTap: () async {
+                        final picker = ImagePicker();
+                        final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+                        if (pickedFile != null) {
+                          setStateDialog(() {
+                            newSelectedImage = File(pickedFile.path);
+                            currentImageUrl = null; // Menimpa gambar lama dengan gambar lokal baru
+                          });
+                        }
+                      },
+                      child: Container(
+                        height: 150, width: double.infinity,
+                        decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
+                        child: newSelectedImage != null
+                            ? Image.file(newSelectedImage!, fit: BoxFit.cover)
+                            : (currentImageUrl != null
+                                ? Image.network(currentImageUrl!, fit: BoxFit.cover)
+                                : const Icon(Icons.add_a_photo, size: 50, color: Colors.grey)),
+                      ),
+                    ),
+                    // Tombol Hapus Gambar (opsional jika ingin menghilangkan gambar dari menu)
+                    if (currentImageUrl != null || newSelectedImage != null)
+                      TextButton(
+                        onPressed: () => setStateDialog(() {
+                          newSelectedImage = null;
+                          currentImageUrl = null;
+                        }),
+                        child: const Text('Hapus Gambar', style: TextStyle(color: Colors.red)),
+                      ),
+                    TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Nama Menu')),
+                    TextField(controller: priceController, decoration: const InputDecoration(labelText: 'Harga'), keyboardType: TextInputType.number),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (nameController.text.isNotEmpty && priceController.text.isNotEmpty) {
+                      String? finalImageUrl = currentImageUrl;
+
+                      // Jika user mengunggah foto baru dari galeri, upload ke storage
+                      if (newSelectedImage != null) {
+                        finalImageUrl = await _supabaseService.uploadMenuImage(newSelectedImage!);
+                      }
+
+                      final updatedMenu = MenuModel(
+                        id: menu.id, // ID wajib diisi agar Supabase tahu data mana yang di-update
+                        name: nameController.text,
+                        price: double.parse(priceController.text),
+                        imageUrl: finalImageUrl, // Null jika dihapus, atau string link gambar
+                      );
+
+                      await _supabaseService.updateMenu(updatedMenu);
+                      if (context.mounted) Navigator.pop(context);
+                      _refreshData();
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  child: const Text('Perbarui'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // === FUNGSI DELETE / HAPUS MENU ===
+  void _confirmDelete(MenuModel menu) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus Menu'),
+        content: Text('Anda yakin ingin menghapus ${menu.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          ElevatedButton(
+            onPressed: () async {
+              await _supabaseService.deleteMenu(menu.id!);
+              if (context.mounted) Navigator.pop(context);
+              _refreshData();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text('Manajemen Menu', style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: Colors.orange[800],
+        title: const Text('Manajemen Menu Restoran'),
+        backgroundColor: Colors.orange,
       ),
-      body: Column(
-        children: [
-          // SEARCH BAR & FILTER KATEGORI DI ATAS
-          Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.white,
-            child: Column(
-              children: [
-                // Kolom Pencarian
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Cari nama menu...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // Tombol Kategori Chips / Tabs
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: ['Semua', 'Makanan', 'Minuman'].map((cat) {
-                    bool isActive = _selectedCategory == cat;
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(20),
-                      onTap: () {
-                        setState(() => _selectedCategory = cat);
-                        _filterMenus();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      body: FutureBuilder<List<MenuModel>>(
+        future: _menusFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return Center(child: Text('Terjadi kesalahan: ${snapshot.error}'));
+          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+            return const Center(child: Text('Belum ada data menu.'));
+          }
+
+          final menus = snapshot.data!;
+          return ListView.builder(
+            itemCount: menus.length,
+            itemBuilder: (context, index) {
+              final menu = menus[index];
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                elevation: 2,
+                child: ListTile(
+                  leading: menu.imageUrl != null 
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          menu.imageUrl!, 
+                          width: 50, 
+                          height: 50, 
+                          fit: BoxFit.cover
+                        ),
+                      )
+                    : Container(
+                        width: 50,
+                        height: 50,
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.orange[800] : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(20),
+                          color: Colors.orange[100],
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          cat,
-                          style: GoogleFonts.poppins(
-                            color: isActive ? Colors.white : Colors.grey[700],
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        child: const Icon(Icons.fastfood, color: Colors.orange),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ],
-            ),
-          ),
-          
-          // DAFTAR LIST MENU
-          Expanded(
-            child: _isLoading 
-              ? const Center(child: CircularProgressIndicator())
-              : _filteredMenus.isEmpty 
-                ? Center(child: Text('Menu tidak ditemukan.', style: GoogleFonts.poppins(color: Colors.grey)))
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: _filteredMenus.length,
-                    itemBuilder: (context, index) {
-                      final menu = _filteredMenus[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 2,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(10),
-                          leading: menu.imageUrl != null 
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(menu.imageUrl!, width: 60, height: 60, fit: BoxFit.cover),
-                              )
-                            : Container(
-                                width: 60, height: 60,
-                                decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
-                                child: const Icon(Icons.fastfood, color: Colors.orange),
-                              ),
-                          title: Text(menu.name, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Rp ${menu.price.toStringAsFixed(0)}'),
-                              const SizedBox(height: 4),
-                              Chip(
-                                label: Text(menu.category?.toUpperCase() ?? 'UMUM', style: const TextStyle(fontSize: 10)),
-                                backgroundColor: Colors.orange[100],
-                              )
-                            ],
-                          ),
-                          isThreeLine: true,
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                onPressed: () => {}, // Panggil _showEditMenuDialog(menu) disini
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => {}, // Panggil _confirmDelete(menu) disini
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                  title: Text(menu.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Rp ${menu.price.toStringAsFixed(0)}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _showEditMenuDialog(menu),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _confirmDelete(menu),
+                      ),
+                    ],
                   ),
-          ),
-        ],
+                ),
+              );
+            },
+          );
+        },
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.orange[800],
+        backgroundColor: Colors.orange,
         foregroundColor: Colors.white,
         onPressed: _showAddMenuDialog,
         child: const Icon(Icons.add),
