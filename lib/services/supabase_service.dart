@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:io'; 
+import 'package:flutter/material.dart';
 import '../models/menu_model.dart';
 import '../models/ingredient_model.dart';
 import '../models/order_model.dart';
@@ -211,36 +212,38 @@ class SupabaseService {
   // 1. Simpan Nota Belanja & Update Stok
   Future<void> createPurchase(PurchaseModel purchase, List<PurchaseItemModel> items) async {
   try {
-    // 1. Simpan Nota Master
+    // 1. Masukkan Nota ke Tabel purchases
     final res = await _client.from('purchases').insert(purchase.toJson()).select().single();
     final String purchaseId = res['id'];
 
+    // 2. Loop setiap barang yang dibeli
     for (var item in items) {
-      // 2. Simpan Detail Item
+      
+      // A. Simpan ke tabel purchase_items
       await _client.from('purchase_items').insert({
         'purchase_id': purchaseId,
         'ingredient_id': item.ingredientId,
         'quantity': item.quantity,
-        'price': item.cost,
+        'cost': item.cost,
       });
 
-      // 3. Update Stok Bahan Baku
-      // Gunakan .toString() untuk memastikan nilai dikirim sebagai String (UUID compatible)
+      // B. Ambil Stok Lama dari tabel ingredients
       final ingData = await _client
           .from('ingredients')
           .select('stock')
-          .eq('id', item.ingredientId.toString()) // Tambahkan .toString()
+          .eq('id', item.ingredientId.toString()) // .toString() memastikan UUID terbaca benar
           .single();
 
       double currentStock = (ingData['stock'] as num).toDouble();
-
+      
+      // C. Update tabel ingredients dengan Stok Baru (Lama + Beli)
       await _client
           .from('ingredients')
           .update({'stock': currentStock + item.quantity})
-          .eq('id', item.ingredientId.toString()); // Tambahkan .toString()
+          .eq('id', item.ingredientId.toString());
     }
   } catch (e) {
-    throw Exception('Gagal mencatat belanja: $e');
+    throw Exception(e.toString());
   }
 }
 
@@ -249,4 +252,37 @@ class SupabaseService {
     final res = await _client.from('purchases').select().order('purchase_date', ascending: false);
     return (res as List).map((json) => PurchaseModel.fromJson(json)).toList();
   }
+
+
+// Mengambil riwayat master belanja sebagai Stream
+Stream<List<PurchaseModel>> getPurchasesStream() {
+  return _client // <--- _client diganti menjadi supabase
+      .from('purchases')
+      .stream(primaryKey: ['id'])
+      .order('purchase_date', ascending: false) 
+      .map((list) => list.map((json) => PurchaseModel.fromJson(json)).toList());
+}
+
+// Mengambil rincian item berdasarkan ID belanja
+Future<List<PurchaseItemModel>> getPurchaseItems(String purchaseId) async {
+  try {
+    final List<dynamic> res = await _client // <--- _client diganti menjadi supabase
+        .from('purchase_items')
+        .select('id, purchase_id, ingredient_id, quantity, cost, ingredients(name)')
+        .eq('purchase_id', purchaseId);
+
+    return res.map((json) {
+      return PurchaseItemModel(
+        id: json['id'].toString(),
+        ingredientId: json['ingredient_id'].toString(),
+        quantity: (json['quantity'] as num).toDouble(),
+        cost: (json['cost'] as num).toDouble(),
+        ingredientName: json['ingredients'] != null ? json['ingredients']['name'] : 'Bahan Baku',
+      );
+    }).toList();
+  } catch (e) {
+    debugPrint('Error mengambil rincian belanja: $e'); // debugPrint sekarang akan berfungsi
+    return [];
+  }
+}
 }
