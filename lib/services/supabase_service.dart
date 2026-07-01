@@ -77,6 +77,34 @@ class SupabaseService {
     }
   }
 
+  // 3. Fungsi untuk memperbarui data bahan baku
+  Future<void> updateIngredient(IngredientModel ingredient) async {
+    try {
+      await _client.from('ingredients') // Sesuaikan dengan nama tabel Anda di Supabase
+          .update({
+            'name': ingredient.name,
+            'unit': ingredient.unit,
+            'stock': ingredient.stock,
+          })
+          .eq('id', ingredient.id!); // Mencocokkan berdasarkan ID
+    } catch (e) {
+      throw Exception('Gagal memperbarui bahan baku: $e');
+    }
+  }
+
+  // 4. Fungsi untuk menghapus data bahan baku
+  Future<void> deleteIngredient(String id) async {
+    try {
+      await _client
+          .from('ingredients')
+          .delete()
+          .eq('id', id);
+    } catch (e) {
+      throw Exception('Gagal menghapus bahan baku: $e');
+    }
+  }
+
+
   // ================= FUNGSI UNTUK PESANAN (ORDERS) =================
 
   // 1. Fungsi untuk membuat pesanan baru beserta rincian itemnya
@@ -182,30 +210,39 @@ class SupabaseService {
 
   // 1. Simpan Nota Belanja & Update Stok
   Future<void> createPurchase(PurchaseModel purchase, List<PurchaseItemModel> items) async {
-    try {
-      // Simpan Nota Master
-      final res = await _client.from('purchases').insert(purchase.toJson()).select().single();
-      final purchaseId = res['id'];
+  try {
+    // 1. Simpan Nota Master
+    final res = await _client.from('purchases').insert(purchase.toJson()).select().single();
+    final String purchaseId = res['id'];
 
-      for (var item in items) {
-        // Simpan Detail Item
-        await _client.from('purchase_items').insert({
-          'purchase_id': purchaseId,
-          ...item.toJson(),
-        });
+    for (var item in items) {
+      // 2. Simpan Detail Item
+      await _client.from('purchase_items').insert({
+        'purchase_id': purchaseId,
+        'ingredient_id': item.ingredientId,
+        'quantity': item.quantity,
+        'price': item.cost,
+      });
 
-        // OTOMATIS UPDATE STOK: Ambil stok lama + quantity baru
-        final ingRes = await _client.from('ingredients').select('stock').eq('id', item.ingredientId).single();
-        double currentStock = (ingRes['stock'] as num).toDouble();
-        
-        await _client.from('ingredients').update({
-          'stock': currentStock + item.quantity
-        }).eq('id', item.ingredientId);
-      }
-    } catch (e) {
-      throw Exception('Gagal mencatat belanja: $e');
+      // 3. Update Stok Bahan Baku
+      // Gunakan .toString() untuk memastikan nilai dikirim sebagai String (UUID compatible)
+      final ingData = await _client
+          .from('ingredients')
+          .select('stock')
+          .eq('id', item.ingredientId.toString()) // Tambahkan .toString()
+          .single();
+
+      double currentStock = (ingData['stock'] as num).toDouble();
+
+      await _client
+          .from('ingredients')
+          .update({'stock': currentStock + item.quantity})
+          .eq('id', item.ingredientId.toString()); // Tambahkan .toString()
     }
+  } catch (e) {
+    throw Exception('Gagal mencatat belanja: $e');
   }
+}
 
   // 2. Ambil Riwayat Belanja
   Future<List<PurchaseModel>> getPurchases() async {

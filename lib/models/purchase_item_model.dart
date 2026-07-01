@@ -1,7 +1,7 @@
 class PurchaseItemModel {
   final String? id;
   final String? purchaseId;
-  final String ingredientId;
+  final String? ingredientId;
   final double quantity;
   final double cost;
   final String? ingredientName;
